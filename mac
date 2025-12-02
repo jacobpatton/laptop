@@ -55,6 +55,12 @@ install_homebrew() {
 }
 
 install_chezmoi() {
+  # Check if already authenticated with GitHub
+  if ! gh auth status >/dev/null 2>&1; then
+    fancy_echo "GitHub authentication required for private dotfiles repo..."
+    gh auth login
+  fi
+
   if ! command -v chezmoi >/dev/null; then
     fancy_echo "Installing chezmoi and applying dotfiles..."
     sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply jacobpatton
