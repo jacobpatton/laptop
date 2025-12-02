@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(brew tap:*)",
+      "Bash(sysctl:*)",
+      "Bash(brew list:*)",
+      "Bash(cat:*)",
+      "Bash(shellcheck:*)",
+      "Bash(brew info:*)",
+      "Bash(brew search:*)",
+      "Bash(mas list:*)",
+      "Bash(mdls:*)",
+      "Bash(/opt/homebrew/bin/mas list:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(chezmoi add:*)"
+    ],
+    "additionalDirectories": [
+      "/Users/jacobpatton/.local/share/chezmoi/",
+      "/Users/jacobpatton/.config",
+      "/Users/jacobpatton/.local",
+      "/Applications/",
+      "/opt/homebrew/",
+      "/Users/jacobpatton/.local/share/mise",
+      "/Users/jacobpatton/Work/RAG"
+    ]
+  }
+}

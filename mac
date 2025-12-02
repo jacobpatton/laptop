@@ -18,20 +18,9 @@ fancy_echo() {
 }
 
 pre_setup() {
-  if [ ! -d "$HOME/.bin/" ]; then
-    mkdir "$HOME/.bin"
-  fi
-
-  if [ ! -f "$HOME/.zshrc" ]; then
-    touch "$HOME/.zshrc"
-  fi
-
   if [ ! -f "$HOME/.Brewfile" ]; then
     touch "$HOME/.Brewfile"
   fi
-
-  # shellcheck disable=SC2016
-  append_to_zshrc 'export PATH="$HOME/.bin:$PATH"'
 
   # Determine Homebrew prefix
   ARCH="$(uname -m)"
@@ -39,77 +28,6 @@ pre_setup() {
     HOMEBREW_PREFIX="/opt/homebrew"
   else
     HOMEBREW_PREFIX="/usr/local"
-  fi
-}
-
-append_to_zshrc() {
-  local text="$1" zshrc
-  local skip_new_line="${2:-0}"
-
-  if [ -w "$HOME/.zshrc.local" ]; then
-    zshrc="$HOME/.zshrc.local"
-  else
-    zshrc="$HOME/.zshrc"
-  fi
-
-  if ! grep -Fqs "$text" "$zshrc"; then
-    if [ "$skip_new_line" -eq 1 ]; then
-      printf "%s\n" "$text" >> "$zshrc"
-    else
-      printf "\n%s\n" "$text" >> "$zshrc"
-    fi
-  fi
-}
-
-prepend_to_zshrc() {
-  local text="$1" zshrc
-
-  if [ -w "$HOME/.zshrc.local" ]; then
-    zshrc="$HOME/.zshrc.local"
-  else
-    zshrc="$HOME/.zshrc"
-  fi
-
-  echo -e "$text\n\n$(cat $zshrc)" > $zshrc
-}
-
-config_zsh() {
-  read -r -p "Do you want to install Zsh's extensions? [Y|n] " response
-
-  if [[ ! $response =~ (n|no|N) ]];then
-    sudo chsh -s $(which zsh)
-
-    fancy_echo "Installing Oh my Zsh"
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)" "" --unattended
-
-    if [ ! -d ~/.zsh/zsh-defer ]; then
-      git clone https://github.com/romkatv/zsh-defer.git ~/.zsh/zsh-defer
-      prepend_to_zshrc 'source ~/.zsh/zsh-defer/zsh-defer.plugin.zsh'
-    fi
-    if [ ! -d ~/.zsh/zsh-autosuggestions ]; then
-      git clone https://github.com/zsh-users/zsh-autosuggestions.git ~/.zsh/zsh-autosuggestions
-      prepend_to_zshrc 'source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh'
-    fi
-    if [ ! -d ~/.zsh/zsh-syntax-highlighting ]; then
-      git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ~/.zsh/zsh-syntax-highlighting
-      prepend_to_zshrc 'source ~/.zsh/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh'
-    fi
-    if [ ! -d ~/.oh-my-zsh/custom/plugins/zsh-completions ]; then
-      git clone https://github.com/zsh-users/zsh-completions.git ~/.oh-my-zsh/custom/plugins/zsh-completions
-      prepend_to_zshrc 'fpath+=~/.oh-my-zsh/custom/plugins/zsh-completions/src'
-    fi
-
-    prepend_to_zshrc 'ZSH_DISABLE_COMPFIX=true'
-
-    # shellcheck disable=SC2016
-    append_to_zshrc 'export PATH="$HOME/.bin:$PATH"'
-
-    zsh_config_homebrew
-
-    # shellcheck disable=SC2016
-    append_to_zshrc 'export PATH=~/.asdf/shims:$PATH'
-
-    fancy_echo "Configured Zsh"
   fi
 }
 
@@ -127,8 +45,6 @@ install_homebrew() {
       /bin/bash -c \
         "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-      zsh_config_homebrew
-
       export PATH="$HOMEBREW_PREFIX/bin:$PATH"
   fi
 
@@ -138,120 +54,40 @@ install_homebrew() {
   fi
 }
 
-zsh_config_homebrew() {
-  fancy_echo "Adding brew to zshrc automatically..."
-  append_to_zshrc "eval \"\$($HOMEBREW_PREFIX/bin/brew shellenv)\""
-}
-
-install_asdf() {
-  fancy_echo "Configuring asdf version manager ..."
-  if [ ! -d "$HOME/.asdf" ]; then
-    brew install asdf
-
-    # shellcheck disable=SC2016
-    append_to_zshrc 'export PATH=~/.asdf/shims:$PATH'
-
-    append_to_zshrc "source $(brew --prefix asdf)/libexec/asdf.sh" 1
-  fi
-}
-
-add_or_update_asdf_plugin() {
-  local name="$1"
-  local url="$2"
-
-  if ! asdf plugin-list | grep -Fq "$name"; then
-    asdf plugin-add "$name" "$url"
+install_chezmoi() {
+  if ! command -v chezmoi >/dev/null; then
+    fancy_echo "Installing chezmoi and applying dotfiles..."
+    sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply jacobpatton
   else
-    asdf plugin-update "$name"
+    fancy_echo "Updating dotfiles with chezmoi..."
+    chezmoi update
   fi
 }
 
-install_asdf_language() {
-  local language="$1"
-  local regex_pattern="$2"
-  local version
-
-  if [ -z "$regex_pattern" ]; then
-    regex_pattern="^\d+.\d+.?\d?$"
-  fi
-
-  version="$(asdf list-all "$language" | grep -E "$regex_pattern" | tail -1)"
-
-  if ! asdf list "$language" | grep -Fq "$version"; then
-    asdf install "$language" "$version"
-    asdf global "$language" "$version"
+install_mise() {
+  if ! command -v mise >/dev/null; then
+    fancy_echo "Installing mise..."
+    curl https://mise.run | sh
   fi
 }
 
-install_asdf_ruby() {
-  # shellcheck disable=SC1090
-  . "$(brew --prefix asdf)/libexec/asdf.sh"
-  add_or_update_asdf_plugin "ruby" "https://github.com/asdf-vm/asdf-ruby.git"
+install_mise_languages() {
+  fancy_echo "Installing languages via mise..."
+  mise install ruby node go
 
-  fancy_echo "Installing latest Ruby ..."
-  install_asdf_language "ruby"
-  gem update --system
-  number_of_cores=$(sysctl -n hw.ncpu)
-  bundle config --global jobs $((number_of_cores - 1))
-}
-
-install_asdf_nodejs() {
-  # shellcheck disable=SC1090
-  . "$(brew --prefix asdf)/libexec/asdf.sh"
-  add_or_update_asdf_plugin "nodejs" "https://github.com/asdf-vm/asdf-nodejs.git"
-
-  fancy_echo "Installing latest Node ..."
-  install_asdf_language "nodejs"
-}
-
-install_asdf_erlang() {
-  # shellcheck disable=SC1090
-  . "$(brew --prefix asdf)/libexec/asdf.sh"
-  add_or_update_asdf_plugin "erlang" "https://github.com/asdf-vm/asdf-erlang.git"
-
-  fancy_echo "Installing latest Erlang ..."
-  install_asdf_language "erlang"
-}
-
-install_asdf_elixir() {
-  # shellcheck disable=SC1090
-  . "$(brew --prefix asdf)/libexec/asdf.sh"
-  add_or_update_asdf_plugin "elixir" "https://github.com/asdf-vm/asdf-elixir.git"
-
-  fancy_echo "Installing latest Elixir ..."
-  install_asdf_language "elixir" "^\d+.\d+.?\d+?-otp-\d+$"
-}
-
-install_asdf_golang() {
-  # shellcheck disable=SC1090
-  . "$(brew --prefix asdf)/libexec/asdf.sh"
-  add_or_update_asdf_plugin "golang" "https://github.com/asdf-community/asdf-golang.git"
-
-  fancy_echo "Installing latest Go ..."
-  install_asdf_language "golang" "^\d+.\d+.?\d+?-otp-\d+$"
+  fancy_echo "Installing global npm packages..."
+  npm install -g @anthropic-ai/claude-code @google/generative-ai
 }
 
 append_general_dependencies() {
   fancy_echo "Appending general dependencies to Brewfile"
 
   tee "$HOME/.Brewfile" <<-EOF
-    # General
+    # Taps
     tap "thoughtbot/formulae"
     tap "homebrew/services"
     tap "universal-ctags/universal-ctags"
     tap "github/gh"
-
-    # mas-cli to install macOS apps
-    brew "mas"
-
-    # General apps
-    cask "slack" unless File.directory?("/Applications/Slack.app")
-    cask "google-chrome" unless File.directory?("/Applications/Google Chrome.app")
-    cask "1password" unless File.directory?("/Applications/1Password 7.app")
-    cask "1password-cli"
-    cask "skitch" unless File.directory?("/Applications/Skitch.app")
-    cask "postman" unless File.directory?("/Applications/Postman.app")
-    cask "iterm2" unless File.directory?("/Applications/iTerm.app")
 
     # Unix
     brew "universal-ctags", args: ["HEAD"]
@@ -259,31 +95,60 @@ append_general_dependencies() {
     brew "openssl"
     brew "gpg"
     brew "zsh"
+    brew "fzf"
+    brew "tmux"
+    brew "reattach-to-user-namespace"
+    brew "the_silver_searcher"
+    brew "poppler"
+    brew "watchman"
 
     # GitHub extensions
     brew "gh"
-    cask "github" unless File.directory?("/Applications/GitHub Desktop.app")
     brew "git-lfs"
 
-    # Editor
-    cask "visual-studio-code" unless File.directory?("/Applications/Visual Studio Code.app")
+    # Version control
+    brew "jj"
 
-    # Programming language prerequisites and package managers
-    brew "libyaml" # should come after openssl
+    # Build dependencies
+    brew "rust"
+
+    # Programming language prerequisites
+    brew "libyaml"
     brew "coreutils"
-EOF
 
-  if [ "$ARCH" != "arm64" ]; then
-    append_general_intel_dependencies
-  fi
-}
+    # Databases
+    brew "postgresql@14"
+    brew "pgvector"
+    brew "redis"
 
-append_general_intel_dependencies() {
-  fancy_echo "Appending web's dependencies to Brewfile"
+    # CLI tools
+    cask "1password-cli"
+    cask "gpg-suite-no-mail"
 
-  tee -a "$HOME/.Brewfile" <<-EOF
-    # General apps
-    cask "keybase" unless File.directory?("/Applications/Keybase.app")
+    # Browser
+    cask "eloston-chromium"
+
+    # Terminal
+    cask "wezterm"
+
+    # Automation
+    cask "hammerspoon"
+    cask "karabiner-elements"
+    cask "espanso"
+
+    # Productivity
+    cask "rectangle"
+    cask "alfred"
+    cask "bettertouchtool"
+    # Keyboard Maestro 10.2: https://files.stairways.com/keyboardmaestro-102.zip
+    cask "freedom"
+
+    # Utilities
+    # Parachute: https://apps.apple.com/app/parachute/id1436650069
+    cask "cleanshot"
+    cask "tailscale"
+    cask "soundsource"
+    cask "jordanbaird-ice"
 EOF
 }
 
@@ -296,7 +161,6 @@ append_web_dependencies() {
     tap "phrase/brewed"
 
     # Devops
-    cask "docker"
     brew "heroku"
     brew "awscli"
 
@@ -307,33 +171,6 @@ append_web_dependencies() {
     brew "yarn"
     brew "phrase"
     brew "libpq"
-    cask "jetbrains-toolbox"
-EOF
-
-  append_to_zshrc 'export PATH="/opt/homebrew/opt/libpq/bin:$PATH"'
-}
-
-append_ios_dependencies() {
-  fancy_echo "Appending iOS's dependencies to Brewfile"
-
-  tee -a "$HOME/.Brewfile" <<-EOF
-    # iOS
-    brew "cocoapods"
-    cask "figma"
-    cask "proxyman"
-    cask "sourcetree"
-    cask "xcodes"
-EOF
-}
-
-append_android_dependencies() {
-  fancy_echo "Appending Android's dependencies to Brewfile"
-
-  tee -a "$HOME/.Brewfile" <<-EOF
-    # Android
-    cask "temurin"
-    cask "android-studio"
-    cask "android-sdk"
 EOF
 }
 
@@ -357,37 +194,19 @@ install_laptop_local() {
 
 install() {
   read -r -p "Do you want to install Web's dependencies? [y|N] " web_dep
-  read -r -p "Do you want to install iOS's dependencies? [y|N] " ios_dep
-  read -r -p "Do you want to install Android's dependencies? [y|N] " android_dep
 
   pre_setup
   install_homebrew
-
   append_general_dependencies
 
   if [[ $web_dep =~ (y|yes|Y) ]];then
     append_web_dependencies
-  fi
-
-  if [[ $ios_dep =~ (y|yes|Y) ]];then
-    append_ios_dependencies
-  fi
-
-  if [[ $android_dep =~ (y|yes|Y) ]];then
-    append_android_dependencies
+    install_mise
+    install_mise_languages
   fi
 
   install_dependencies
-
-  if [[ $web_dep =~ (y|yes|Y) ]];then
-    install_asdf
-    install_asdf_ruby
-    install_asdf_nodejs
-    install_asdf_erlang
-    install_asdf_elixir
-    install_asdf_golang
-  fi
-
+  install_chezmoi
   install_laptop_local
 
   brew cleanup
@@ -395,8 +214,5 @@ install() {
 
 # Run
 install
-
-# Zsh extensions
-config_zsh
 
 fancy_echo "Installation successful"
